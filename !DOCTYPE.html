@@ -1,0 +1,1561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Myelectricitybillcalculator - India's Electricity Bill Calculator</title>
+    <meta name="description" content="Calculate, compare, and understand your electricity bills for any state in India. Supports Domestic, Commercial, and Industrial connections with the latest slab rates.">
+    <meta name="keywords" content="electricity bill calculator, india electricity bill, state electricity tariff, domestic electricity rates, commercial electricity rates, Myelectricitybillcalculator">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- React -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Papaparse for CSV parsing in Admin Panel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/papaparse/5.3.2/papaparse.min.js"></script>
+    
+    <!-- Chart.js for comparison chart -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Custom Styles -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc; /* slate-50 */
+        }
+        @import url('https://rsms.me/inter/inter.css');
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        /* Simple loader */
+        .loader {
+            border: 4px solid #f3f3f3; /* Light grey */
+            border-top: 4px solid #3498db; /* Blue */
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <!-- Main Application Logic -->
+    <script type="text/babel">
+    const { useState, useEffect, useMemo, useRef } = React;
+
+    // --- DATA STORE ---
+    const initialTariffData = {
+      "Andaman and Nicobar Islands": {
+        "Domestic": {
+          slabs: [
+            { min: 0, max: 100, rate: 3.20 },
+            { min: 101, max: 200, rate: 4.80 },
+            { min: 201, max: 300, rate: 6.00 },
+            { min: 301, max: Infinity, rate: 7.50 }
+          ],
+          fixedCharges: [{ charge: 20 }],
+          sourceURL: "https://jercuts.gov.in/writereaddata/UploadFile/Tariff-Order-A&N-FY-24-25.pdf",
+          sourceTitle: "JERC (UTs) Tariff Order FY 2024-25",
+          lastUpdated: "2024-09-09",
+          dataConfidence: "High"
+        }
+      },
+      "Andhra Pradesh": {
+        "Domestic": {
+          slabs: [
+            { min: 0, max: 30, rate: 1.90 },
+            { min: 31, max: 75, rate: 3.00 },
+            { min: 76, max: 125, rate: 4.50 },
+            { min: 126, max: 225, rate: 6.00 },
+            { min: 226, max: 400, rate: 8.75 },
+            { min: 401, max: Infinity, rate: 9.75 }
+          ],
+          fixedCharges: [{ charge: 10 }],
+          sourceURL: "https://www.aptransco.co.in/aptransco/tariff.html",
+          sourceTitle: "APERC Tariff Order",
+          lastUpdated: "2024-09-08",
+          dataConfidence: "Medium"
+        }
+      },
+      "Arunachal Pradesh": {
+          "Domestic": {
+              slabs: [
+                  { min: 0, max: 100, rate: 2.30 },
+                  { min: 101, max: 200, rate: 3.50 },
+                  { min: 201, max: Infinity, rate: 4.60 }
+              ],
+              fixedCharges: [ { charge: 20 } ],
+              sourceURL: "https://www.aperc.in/pdf/Tariff_Order_for_FY_2023-24_for_DOP.pdf",
+              sourceTitle: "APERC Tariff Order FY 2023-24",
+              lastUpdated: "2024-09-09",
+              dataConfidence: "High"
+          }
+      },
+      "Assam": {
+          "Domestic": {
+              slabs: [
+                  { min: 0, max: 120, rate: 5.30 },
+                  { min: 121, max: 240, rate: 7.15 },
+                  { min: 241, max: Infinity, rate: 8.25 }
+              ],
+              fixedCharges: [ { charge: 60 } ],
+              sourceURL: "https://aerc.gov.in/orders_2023_24_Tariff_APDCL.html",
+              sourceTitle: "AERC Tariff Order FY 2023-24 (APDCL)",
+              lastUpdated: "2024-09-09",
+              dataConfidence: "High"
+          }
+      },
+      "Bihar": {
+        "Domestic": {
+          slabs: [
+            { min: 0, max: 100, rate: 6.05 },
+            { min: 101, max: 200, rate: 6.85 },
+            { min: 201, max: 300, rate: 7.70 },
+            { min: 301, max: Infinity, rate: 8.50 }
+          ],
+          fixedCharges: [{ charge: 40 }],
+          sourceURL: "https://berc.co.in/orders/tariff-order/",
+          sourceTitle: "BERC Tariff Orders",
+          lastUpdated: "2024-09-09",
+          dataConfidence: "Medium",
+          notes: "Represents Urban Domestic rates. Subsidies may apply."
+        }
+      },
+      "Chandigarh": {
+        "Domestic": {
+            slabs: [
+                { min: 0, max: 150, rate: 2.75 },
+                { min: 151, max: 400, rate: 5.00 },
+                { min: 401, max: Infinity, rate: 5.20 }
+            ],
+            fixedCharges: [ { charge: 15 } ],
+            sourceURL: "https://jercuts.gov.in/writereaddata/UploadFile/T_O_Chd_24-25.pdf",
+            sourceTitle: "JERC (UTs) Tariff Order FY 2024-25",
+            lastUpdated: "2024-09-09",
+            dataConfidence: "High"
+        }
+      },
+      "Chhattisgarh": {
+        "Domestic": {
+            slabs: [
+                { min: 0, max: 100, rate: 4.70 },
+                { min: 101, max: 200, rate: 4.80 },
+                { min: 201, max: 400, rate: 6.20 },
+                { min: 401, max: 600, rate: 7.50 },
+                { min: 601, max: Infinity, rate: 8.30 }
+            ],
+            fixedCharges: [ { charge: 25 } ],
+            sourceURL: "https://cserc.gov.in/what-is-new",
+            sourceTitle: "CSERC Tariff Orders",
+            lastUpdated: "2024-09-09",
+            dataConfidence: "Medium",
+            notes: "Half rebate on bills up to 400 units not included."
+        }
+      },
+      "Delhi": {
+        "Domestic": {
+          slabs: [
+            { min: 0, max: 200, rate: 3.00 },
+            { min: 201, max: 400, rate: 4.50 },
+            { min: 401, max: 800, rate: 6.50 },
+            { min: 801, max: 1200, rate: 7.00 },
+            { min: 1201, max: Infinity, rate: 8.00 }
+          ],
+          fixedCharges: [
+            { loadKW: 2, charge: 20 },
+            { loadKW: 5, charge: 50 },
+            { loadKW: 15, charge: 100 },
+          ],
+          sourceURL: "https://www.derc.gov.in/sites/default/files/Tariff%20Order%20FY%202023-24.pdf",
+          sourceTitle: "DERC Tariff Order FY 2023-24",
+          lastUpdated: "2024-08-26",
+          dataConfidence: "High",
+          notes: "Subsidy of 100% for consumption up to 200 units is applicable but not included in this calculation."
+        },
+        "Commercial": {
+          slabs: [
+            { min: 0, max: 200, rate: 6.50 },
+            { min: 201, max: 400, rate: 7.50 },
+            { min: 401, max: Infinity, rate: 8.50 }
+          ],
+          fixedCharges: [{ loadKW: 3, charge: 150 }, { loadKW: 5, charge: 250 }],
+          sourceURL: "https://www.derc.gov.in/sites/default/files/Tariff%20Order%20FY%202023-24.pdf",
+          sourceTitle: "DERC Tariff Order FY 2023-24 (Sample Commercial)",
+          lastUpdated: "2024-08-26",
+          dataConfidence: "Medium",
+          notes: "Sample commercial rates for demonstration."
+        }
+      },
+       "Goa": {
+        "Domestic": {
+            slabs: [
+                { min: 0, max: 100, rate: 1.75 },
+                { min: 101, max: 200, rate: 2.60 },
+                { min: 201, max: 300, rate: 3.30 },
+                { min: 301, max: 400, rate: 4.40 },
+                { min: 401, max: Infinity, rate: 5.00 }
+            ],
+            fixedCharges: [ { charge: 20 } ],
+            sourceURL: "https://jercuts.gov.in/writereaddata/UploadFile/TO-Goa-FY-24-25.pdf",
+            sourceTitle: "JERC (UTs) Tariff Order FY 2024-25",
+            lastUpdated: "2024-09-09",
+            dataConfidence: "High"
+        }
+      },
+      "Gujarat": {
+          "Domestic": {
+              slabs: [
+                  { min: 0, max: 50, rate: 3.20 },
+                  { min: 51, max: 100, rate: 3.85 },
+                  { min: 101, max: 250, rate: 4.80 },
+                  { min: 251, max: Infinity, rate: 5.05 }
+              ],
+              fixedCharges: [ { charge: 25 } ],
+              sourceURL: "https://www.gercin.org/index.php?option=com_content&view=article&id=208&Itemid=162",
+              sourceTitle: "GERC Tariff Orders (DGVCL)",
+              lastUpdated: "2024-08-20",
+              dataConfidence: "Medium"
+          }
+      },
+      "Haryana": {
+          "Domestic": {
+              slabs: [
+                  { min: 0, max: 150, rate: 2.75 },
+                  { min: 151, max: 250, rate: 5.25 },
+                  { min: 251, max: 500, rate: 6.30 },
+                  { min: 501, max: 800, rate: 7.10 },
+                  { min: 801, max: Infinity, rate: 7.10 }
+              ],
+              fixedCharges: [ { charge: 115 } ],
+              sourceURL: "https://herc.gov.in/writereaddata/orders/LO1680155091.pdf",
+              sourceTitle: "HERC Tariff Order FY 2023-24 (UHBVN)",
+              lastUpdated: "2024-09-09",
+              dataConfidence: "High"
+          }
+      },
+      "Himachal Pradesh": {
+          "Domestic": {
+              slabs: [
+                  { min: 0, max: 125, rate: 0.00 },
+                  { min: 126, max: 300, rate: 3.95 },
+                  { min: 301, max: Infinity, rate: 5.05 }
+              ],
+              fixedCharges: [ { charge: 40 } ],
+              sourceURL: "https://hperc.org/pages/en/tariff-orders.php",
+              sourceTitle: "HPERC Tariff Orders",
+              lastUpdated: "2024-09-09",
+              dataConfidence: "Medium",
+              notes: "First 125 units are free, this is reflected in the rate."
+          }
+      },
+      "Jammu and Kashmir": {
+          "Domestic": {
+              slabs: [
+                  { min: 0, max: 200, rate: 2.90 },
+                  { min: 201, max: 400, rate: 4.20 },
+                  { min: 401, max: Infinity, rate: 5.50 }
+              ],
+              fixedCharges: [ { charge: 35 } ],
+              sourceURL: "https://jkelectricity.co.in/lastest-updates",
+              sourceTitle: "JKPDD/JPDCL Tariff Schedule",
+              lastUpdated: "2024-09-09",
+              dataConfidence: "Medium"
+          }
+      },
+      "Jharkhand": {
+        "Domestic": {
+            slabs: [
+                { min: 0, max: 100, rate: 6.30 },
+                { min: 101, max: 200, rate: 6.30 },
+                { min: 201, max: Infinity, rate: 6.30 }
+            ],
+            fixedCharges: [ { charge: 20 } ],
+            sourceURL: "https://www.jscregulatory.com/tariff_orders.php",
+            sourceTitle: "JSERC Tariff Orders",
+            lastUpdated: "2024-09-09",
+            dataConfidence: "Low",
+            notes: "SAMPLE - verify source. Flat rate for urban domestic supply. Subsidies may apply."
+        }
+      },
+      "Karnataka": {
+        "Domestic": {
+          slabs: [
+            { min: 0, max: 100, rate: 4.75 },
+            { min: 101, max: 200, rate: 7.00 },
+            { min: 201, max: Infinity, rate: 8.20 }
+          ],
+          fixedCharges: [{ charge: 110 }],
+          sourceURL: "https://kerc.karnataka.gov.in/uploads/media-files/Tariff_Order_2023-24_Final_with_Book_Marks.pdf",
+          sourceTitle: "KERC Tariff Order 2023-24 (BESCOM)",
+          lastUpdated: "2024-08-15",
+          dataConfidence: "High"
+        },
+        "Commercial": {
+          slabs: [
+            { min: 0, max: 50, rate: 7.50 },
+            { min: 51, max: 100, rate: 8.50 },
+            { min: 101, max: Infinity, rate: 9.50 }
+          ],
+          fixedCharges: [{ charge: 150 }],
+          sourceURL: "https://kerc.karnataka.gov.in/uploads/media-files/Tariff_Order_2023-24_Final_with_Book_Marks.pdf",
+          sourceTitle: "KERC Tariff Order 2023-24 (Sample Commercial)",
+          lastUpdated: "2024-08-15",
+          dataConfidence: "Medium"
+        }
+      },
+      "Kerala": {
+          "Domestic": {
+              slabs: [
+                  { min: 0, max: 50, rate: 3.15 },
+                  { min: 51, max: 100, rate: 3.70 },
+                  { min: 101, max: 150, rate: 4.80 },
+                  { min: 151, max: 200, rate: 6.40 },
+                  { min: 201, max: 250, rate: 7.60 },
+                  { min: 251, max: Infinity, rate: 8.00 }
+              ],
+              fixedCharges: [ { charge: 40 } ],
+              sourceURL: "https://www.kseb.in/index.php?option=com_content&view=article&id=103&Itemid=703&lang=en",
+              sourceTitle: "KSEB Tariff Orders",
+              lastUpdated: "2024-08-18",
+              dataConfidence: "High"
+          }
+      },
+      "Ladakh": {
+        "Domestic": {
+            slabs: [
+                { min: 0, max: 200, rate: 2.90 },
+                { min: 201, max: 400, rate: 4.20 },
+                { min: 401, max: Infinity, rate: 5.50 }
+            ],
+            fixedCharges: [ { charge: 35 } ],
+            sourceURL: "https://jercuts.gov.in/Default.aspx",
+            sourceTitle: "JERC (UTs) - Ladakh data based on former J&K rates",
+            lastUpdated: "2024-09-09",
+            dataConfidence: "Low",
+            notes: "SAMPLE - verify source. Rates are estimated based on previous J&K structure."
+        }
+      },
+      "Madhya Pradesh": {
+          "Domestic": {
+              slabs: [
+                  { min: 0, max: 50, rate: 4.05 },
+                  { min: 51, max: 150, rate: 4.95 },
+                  { min: 151, max: 300, rate: 6.30 },
+                  { min: 301, max: Infinity, rate: 6.50 }
+              ],
+              fixedCharges: [ { charge: 125 } ],
+              sourceURL: "http://www.mperc.in/0201_Tariff.htm",
+              sourceTitle: "MPERC Tariff Orders",
+              lastUpdated: "2024-09-09",
+              dataConfidence: "Medium"
+          }
+      },
+      "Maharashtra": {
+        "Domestic": {
+          slabs: [
+            { min: 0, max: 100, rate: 3.46 },
+            { min: 101, max: 300, rate: 7.34 },
+            { min: 301, max: 500, rate: 10.32 },
+            { min: 501, max: Infinity, rate: 11.71 }
+          ],
+          fixedCharges: [{ charge: 110 }],
+          sourceURL: "https://www.mahadiscom.in/consumer/wp-content/uploads/2023/04/MERC-Order-31.03.2023-in-Case-No-322-of-2022-MSEDCL.pdf",
+          sourceTitle: "MSEDCL Tariff Schedule FY 2023-24",
+          lastUpdated: "2024-09-01",
+          dataConfidence: "High"
+        },
+        "Commercial": {
+          slabs: [
+            { min: 0, max: 500, rate: 8.00 },
+            { min: 501, max: 1000, rate: 11.50 },
+            { min: 1001, max: Infinity, rate: 12.50 }
+          ],
+          fixedCharges: [{ charge: 250 }],
+          sourceURL: "https://www.mahadiscom.in/consumer/wp-content/uploads/2023/04/MERC-Order-31.03.2023-in-Case-No-322-of-2022-MSEDCL.pdf",
+          sourceTitle: "MSEDCL Tariff Schedule FY 2023-24 (Sample Commercial)",
+          lastUpdated: "2024-09-01",
+          dataConfidence: "Medium",
+          notes: "Sample commercial rates for demonstration."
+        },
+        "Industrial": {
+          slabs: [
+            { min: 0, max: 1000, rate: 7.50 },
+            { min: 1001, max: Infinity, rate: 8.50 }
+          ],
+          fixedCharges: [{ charge: 500 }],
+          sourceURL: "https://www.mahadiscom.in/consumer/wp-content/uploads/2023/04/MERC-Order-31.03.2023-in-Case-No-322-of-2022-MSEDCL.pdf",
+          sourceTitle: "MSEDCL Tariff Schedule FY 2023-24 (Sample Industrial)",
+          lastUpdated: "2024-09-01",
+          dataConfidence: "Medium",
+          notes: "Sample industrial rates for demonstration."
+        }
+      },
+      "Manipur": {
+          "Domestic": {
+              slabs: [
+                  { min: 0, max: 100, rate: 4.10 },
+                  { min: 101, max: 200, rate: 5.20 },
+                  { min: 201, max: Infinity, rate: 5.80 }
+              ],
+              fixedCharges: [ { charge: 60 } ],
+              sourceURL: "https://www.jnerc.gov.in/index.php/tariff",
+              sourceTitle: "JNERC Tariff Orders",
+              lastUpdated: "2024-09-09",
+              dataConfidence: "Medium"
+          }
+      },
+      "Meghalaya": {
+        "Domestic": {
+            slabs: [
+                { min: 0, max: 100, rate: 3.40 },
+                { min: 101, max: 200, rate: 4.50 },
+                { min: 201, max: Infinity, rate: 5.10 }
+            ],
+            fixedCharges: [ { charge: 50 } ],
+            sourceURL: "https://mserc.gov.in/orders",
+            sourceTitle: "MSERC Tariff Orders",
+            lastUpdated: "2024-09-09",
+            dataConfidence: "Medium"
+        }
+      },
+      "Mizoram": {
+        "Domestic": {
+            slabs: [
+                { min: 0, max: 100, rate: 4.55 },
+                { min: 101, max: 200, rate: 5.65 },
+                { min: 201, max: Infinity, rate: 6.45 }
+            ],
+            fixedCharges: [ { charge: 80 } ],
+            sourceURL: "https://www.jnerc.gov.in/index.php/tariff",
+            sourceTitle: "JNERC Tariff Orders",
+            lastUpdated: "2024-09-09",
+            dataConfidence: "Medium"
+        }
+      },
+      "Nagaland": {
+        "Domestic": {
+            slabs: [
+                { min: 0, max: 100, rate: 4.00 },
+                { min: 101, max: 200, rate: 5.00 },
+                { min: 201, max: Infinity, rate: 5.50 }
+            ],
+            fixedCharges: [ { charge: 60 } ],
+            sourceURL: "https://nerc.gov.in/orders.html",
+            sourceTitle: "NERC Tariff Orders",
+            lastUpdated: "2024-09-09",
+            dataConfidence: "Medium"
+        }
+      },
+      "Odisha": {
+        "Domestic": {
+            slabs: [
+                { min: 0, max: 50, rate: 3.00 },
+                { min: 51, max: 200, rate: 4.80 },
+                { min: 201, max: 400, rate: 5.80 },
+                { min: 401, max: Infinity, rate: 6.20 }
+            ],
+            fixedCharges: [ { charge: 20 } ],
+            sourceURL: "https://www.oercl.org/ord-23-24",
+            sourceTitle: "OERC Tariff Orders FY 2023-24",
+            lastUpdated: "2024-09-09",
+            dataConfidence: "High"
+        }
+      },
+      "Puducherry": {
+        "Domestic": {
+            slabs: [
+                { min: 0, max: 100, rate: 1.90 },
+                { min: 101, max: 200, rate: 3.15 },
+                { min: 201, max: 300, rate: 4.90 },
+                { min: 301, max: Infinity, rate: 6.45 }
+            ],
+            fixedCharges: [ { charge: 30 } ],
+            sourceURL: "https://jercuts.gov.in/writereaddata/UploadFile/T_O_Pkl_24_25.pdf",
+            sourceTitle: "JERC (UTs) Tariff Order FY 2024-25",
+            lastUpdated: "2024-09-09",
+            dataConfidence: "High"
+        }
+      },
+      "Punjab": {
+        "Domestic": {
+            slabs: [
+                { min: 0, max: 100, rate: 3.49 },
+                { min: 101, max: 300, rate: 5.84 },
+                { min: 301, max: Infinity, rate: 7.30 }
+            ],
+            fixedCharges: [ { loadKW: 2, charge: 35 }, { loadKW: 7, charge: 55 } ],
+            sourceURL: "https://pserc.gov.in/pages/Tariff%20Orders-14.html",
+            sourceTitle: "PSERC Tariff Orders",
+            lastUpdated: "2024-09-08",
+            dataConfidence: "Medium",
+            notes: "SAMPLE - verify source. First 300 units free per month subsidy not included."
+        }
+      },
+      "Rajasthan": {
+        "Domestic": {
+            slabs: [
+                { min: 0, max: 50, rate: 4.75 },
+                { min: 51, max: 150, rate: 6.50 },
+                { min: 151, max: 300, rate: 7.35 },
+                { min: 301, max: 500, rate: 7.65 },
+                { min: 501, max: Infinity, rate: 7.95 }
+            ],
+            fixedCharges: [ { charge: 125 } ],
+            sourceURL: "https://energy.rajasthan.gov.in/rerc/",
+            sourceTitle: "RERC Tariff Orders",
+            lastUpdated: "2024-09-09",
+            dataConfidence: "Medium",
+            notes: "Subsidy for first 100 units not included."
+        }
+      },
+      "Sikkim": {
+          "Domestic": {
+              slabs: [
+                  { min: 0, max: 100, rate: 1.50 },
+                  { min: 101, max: 200, rate: 2.50 },
+                  { min: 201, max: Infinity, rate: 3.50 }
+              ],
+              fixedCharges: [ { charge: 20 } ],
+              sourceURL: "http://serc.sikkim.gov.in/serc/tariff-orders",
+              sourceTitle: "SERC Sikkim Tariff Orders",
+              lastUpdated: "2024-09-09",
+              dataConfidence: "Medium"
+          }
+      },
+      "Tamil Nadu": {
+          "Domestic": {
+              slabs: [
+                  { min: 0, max: 100, rate: 0.00 },
+                  { min: 101, max: 200, rate: 2.25 },
+                  { min: 201, max: 400, rate: 4.50 },
+                  { min: 401, max: 500, rate: 6.00 },
+                  { min: 501, max: 600, rate: 8.00 },
+                  { min: 601, max: 800, rate: 9.00 },
+                  { min: 801, max: 1000, rate: 10.00 },
+                  { min: 1001, max: Infinity, rate: 11.00 }
+              ],
+              fixedCharges: [ { charge: 0 } ],
+              sourceURL: "https://www.tnerc.gov.in/TNERC_ORDERS_2022_TARIFF_ORDER_T_P__No_7_of_2022_DATED_09_09_2022.html",
+              sourceTitle: "TNERC Tariff Order 2022",
+              lastUpdated: "2024-09-05",
+              dataConfidence: "High",
+              notes: "First 100 units are free. This calculation reflects that."
+          }
+      },
+      "Telangana": {
+        "Domestic": {
+            slabs: [
+                { min: 0, max: 50, rate: 2.60 },
+                { min: 51, max: 100, rate: 3.10 },
+                { min: 101, max: 200, rate: 4.30 },
+                { min: 201, max: 300, rate: 7.20 },
+                { min: 301, max: 400, rate: 8.50 },
+                { min: 401, max: 800, rate: 9.00 },
+                { min: 801, max: Infinity, rate: 9.50 }
+            ],
+            fixedCharges: [ { charge: 25 } ],
+            sourceURL: "https://www.tssouthernpower.com/CPDCL_Home.portal?_nfpb=true&_pageLabel=CPDCL_Home_portal_page_10",
+            sourceTitle: "TSSPDCL Tariff Schedule",
+            lastUpdated: "2024-09-09",
+            dataConfidence: "Medium"
+        }
+      },
+      "Tripura": {
+        "Domestic": {
+            slabs: [
+                { min: 0, max: 50, rate: 4.15 },
+                { min: 51, max: 150, rate: 5.72 },
+                { min: 151, max: 300, rate: 7.08 },
+                { min: 301, max: Infinity, rate: 7.82 }
+            ],
+            fixedCharges: [ { charge: 40 } ],
+            sourceURL: "https://terc.nic.in/order.htm",
+            sourceTitle: "TERC Tariff Orders",
+            lastUpdated: "2024-09-09",
+            dataConfidence: "Medium"
+        }
+      },
+      "Uttar Pradesh": {
+          "Domestic": {
+              slabs: [
+                  { min: 0, max: 150, rate: 5.50 },
+                  { min: 151, max: 300, rate: 6.00 },
+                  { min: 301, max: 500, rate: 6.50 },
+                  { min: 501, max: Infinity, rate: 7.00 }
+              ],
+              fixedCharges: [ { charge: 110 } ],
+              sourceURL: "https://www.uperc.org/App_File/UPERC-SUO-MOTU-Tariff-Order-FY-2023-24-English-pdf-04082023120155.pdf",
+              sourceTitle: "UPERC Tariff Order FY 2023-24",
+              lastUpdated: "2024-08-29",
+              dataConfidence: "High"
+          },
+          "Commercial": {
+              slabs: [
+                  { min: 0, max: 300, rate: 7.50 },
+                  { min: 301, max: 1000, rate: 8.00 },
+                  { min: 1001, max: Infinity, rate: 8.50 }
+              ],
+              fixedCharges: [ { charge: 300 } ],
+              sourceURL: "https://www.uperc.org/App_File/UPERC-SUO-MOTU-Tariff-Order-FY-2023-24-English-pdf-04082023120155.pdf",
+              sourceTitle: "UPERC Tariff Order FY 2023-24 (Sample Commercial)",
+              lastUpdated: "2024-08-29",
+              dataConfidence: "Medium"
+          }
+      },
+      "Uttarakhand": {
+        "Domestic": {
+            slabs: [
+                { min: 0, max: 100, rate: 2.90 },
+                { min: 101, max: 200, rate: 4.20 },
+                { min: 201, max: 400, rate: 5.80 },
+                { min: 401, max: Infinity, rate: 6.30 }
+            ],
+            fixedCharges: [ { charge: 80 } ],
+            sourceURL: "https://uecr.gov.in/file/20421-tariff-order-for-fy-2023-24-upcl.pdf",
+            sourceTitle: "UERC Tariff Order FY 2023-24",
+            lastUpdated: "2024-09-09",
+            dataConfidence: "High"
+        }
+      },
+      "West Bengal": {
+          "Domestic": {
+              slabs: [
+                  { min: 0, max: 102, rate: 5.45 },
+                  { min: 103, max: 180, rate: 7.00 },
+                  { min: 181, max: 300, rate: 7.75 },
+                  { min: 301, max: 600, rate: 8.25 },
+                  { min: 601, max: 900, rate: 9.00 },
+                  { min: 901, max: Infinity, rate: 9.50 }
+              ],
+              fixedCharges: [ { charge: 25 } ],
+              sourceURL: "https://www.wberc.gov.in/wberc/order?year=2023-2024",
+              sourceTitle: "WBERC Tariff Orders (WBSEDCL) 2023-24",
+              lastUpdated: "2024-08-22",
+              dataConfidence: "Medium"
+          }
+      }
+    };
+    
+    // --- CALCULATION ENGINE ---
+    const calculateBill = (tariffInfo, units, fixedChargeOverride) => {
+        if (!tariffInfo || !tariffInfo.slabs || units < 0) { // Allow units to be 0
+            return { totalAmount: 0, breakdown: [], energyCharge: 0, fixedCharge: 0, taxes: 0, totalUnits: 0, surcharges: [] };
+        }
+
+        const breakdown = [];
+        let unitsToProcess = units;
+        let totalEnergyCharge = 0;
+        const sortedSlabs = [...tariffInfo.slabs].sort((a, b) => a.min - b.min);
+        let previousSlabEnd = 0;
+
+        for (const slab of sortedSlabs) {
+            if (unitsToProcess <= 0) break;
+
+            const slabStart = slab.min;
+            const slabEnd = slab.max === Infinity ? units : slab.max;
+            
+            let unitsInThisSlabRange = 0;
+            if(slab.min === 0) {
+                unitsInThisSlabRange = slabEnd + 1;
+            } else {
+                unitsInThisSlabRange = slabEnd - slabStart + 1;
+            }
+            
+            if (units > previousSlabEnd) {
+                const unitsInSlab = Math.min(unitsToProcess, unitsInThisSlabRange);
+                
+                const slabCharge = unitsInSlab * slab.rate;
+                totalEnergyCharge += slabCharge;
+                
+                if (unitsInSlab > 0) {
+                    breakdown.push({
+                        slab: `${slab.min} - ${slab.max === Infinity ? 'Above' : slab.max}`,
+                        units: unitsInSlab.toFixed(2),
+                        rate: slab.rate.toFixed(2),
+                        amount: slabCharge.toFixed(2)
+                    });
+                }
+                
+                unitsToProcess -= unitsInSlab;
+                previousSlabEnd = slab.max;
+            }
+        }
+
+        let fixedCharge = 0;
+        if(fixedChargeOverride !== null && fixedChargeOverride !== undefined && fixedChargeOverride !== ''){
+             fixedCharge = parseFloat(fixedChargeOverride);
+        } else if (tariffInfo.fixedCharges && tariffInfo.fixedCharges.length > 0) {
+            fixedCharge = tariffInfo.fixedCharges[0].charge;
+        }
+        
+        const fuelSurcharge = totalEnergyCharge * 0.05;
+        const electricityDuty = totalEnergyCharge * 0.08;
+        const totalTaxes = fuelSurcharge + electricityDuty;
+
+        const totalAmount = totalEnergyCharge + fixedCharge + totalTaxes;
+
+        return {
+            totalUnits: parseFloat(units),
+            energyCharge: totalEnergyCharge,
+            fixedCharge: fixedCharge,
+            taxes: totalTaxes,
+            totalAmount: totalAmount,
+            breakdown: breakdown,
+            surcharges: [
+              { name: "Fuel Surcharge (5% approx.)", value: fuelSurcharge },
+              { name: "Electricity Duty (8% approx.)", value: electricityDuty }
+            ]
+        };
+    };
+
+    // --- SVG ICONS ---
+    const Svgs = {
+      Calculator: () => (
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-blue-500 mb-2" viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V4a2 2 0 00-2-2H6zm1 2a1 1 0 00-1 1v1a1 1 0 001 1h6a1 1 0 001-1V5a1 1 0 00-1-1H7zM6 9a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
+        </svg>
+      ),
+      Appliances: () => (
+         <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-green-500 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+         </svg>
+      ),
+       SavingTips: () => (
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-yellow-500 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+        </svg>
+      ),
+      Fan: () => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 12c-2 0-4.5.93-5.5 2.5S7.26 18 9 18.5s3.5-1.07 4.5-2.5S14 12 12 12z"></path><path d="M12 12c2 0 4.5-.93 5.5-2.5S16.74 6 15 5.5s-3.5 1.07-4.5 2.5S10 12 12 12z"></path><path d="M12 12c0-2-.93-4.5-2.5-5.5S6 7.26 5.5 9s1.07 3.5 2.5 4.5S12 10 12 12z"></path><path d="M12 12c0 2 .93 4.5 2.5 5.5S18 16.74 18.5 15s-1.07-3.5-2.5-4.5S12 14 12 12z"></path></svg>),
+      TV: () => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect><polyline points="17 2 12 7 7 2"></polyline></svg>),
+      Refrigerator: () => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"></path><path d="M5 10h14"></path><path d="M7 14v2"></path></svg>),
+      Laptop: () => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55A1 1 0 0 1 20.28 20H3.72a1 1 0 0 1-.9-1.45L4 16z"></path></svg>),
+      AC: () => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 10h20"></path><path d="M7 14h-4"></path><path d="M19 14h2"></path><path d="M21 18H3"></path><path d="M7 6h10"></path></svg>),
+      Geyser: () => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 2v6"></path><path d="M15 2v6"></path><path d="M12 11.5a2.5 2.5 0 0 1 0 5 2.5 2.5 0 0 1 0-5z"></path><path d="M6.3 19.5a2.5 2.5 0 0 1 3.5-3.5 2.5 2.5 0 0 1 3.5 3.5l-3.5 3.5-3.5-3.5z"></path><path d="M12 22v-2.5"></path></svg>),
+      Bulb: () => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15.09 16.09a7 7 0 1 1-6.18-6.18"></path><path d="M12 2v4"></path><path d="M8.5 4.5l2 2"></path><path d="M15.5 4.5l-2 2"></path><path d="M12 18H7.3c-.9 0-1.7.5-2.1 1.3-.4.8-.4 1.7 0 2.5.4.8 1.2 1.3 2.1 1.3h9.4c.9 0 1.7-.5 2.1-1.3.4-.8.4-1.7 0-2.5-.4-.8-1.2-1.3-2.1-1.3H12z"></path></svg>),
+      Microwave: () => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect><rect x="6" y="11" width="8" height="7" rx="1" ry="1"></rect><path d="M18 11v.01"></path><path d="M18 15v.01"></path></svg>),
+    }
+
+    // --- COMPONENTS (Order matters for Babel) ---
+    const Header = ({ setPage }) => (
+        <header className="bg-white shadow-md sticky top-0 z-10">
+            <nav className="container mx-auto px-6 py-4 flex justify-between items-center">
+                <div className="text-xl md:text-2xl font-bold text-slate-800 cursor-pointer" onClick={() => setPage('home')}>
+                    ⚡ Myelectricitybillcalculator
+                </div>
+                <div className="hidden md:flex items-center space-x-4 lg:space-x-6">
+                    <a href="#" onClick={(e) => { e.preventDefault(); setPage('home'); }} className="text-gray-600 hover:text-blue-600 transition">Home</a>
+                    <a href="#" onClick={(e) => { e.preventDefault(); setPage('calculator'); }} className="text-gray-600 hover:text-blue-600 transition">Bill Calculator</a>
+                    <a href="#" onClick={(e) => { e.preventDefault(); setPage('applianceCalculator'); }} className="text-gray-600 hover:text-blue-600 transition">Appliance Calculator</a>
+                    <a href="#" onClick={(e) => { e.preventDefault(); setPage('savingTips'); }} className="text-gray-600 hover:text-blue-600 transition font-semibold text-yellow-600">Saving Tips</a>
+                    <a href="#" onClick={(e) => { e.preventDefault(); setPage('tariffs'); }} className="text-gray-600 hover:text-blue-600 transition">Tariffs</a>
+                </div>
+                 <div className="md:hidden">
+                    <button onClick={() => alert("Menu: Home, Bill Calculator, Appliance Calculator, Saving Tips, Tariffs")} className="text-gray-600 focus:outline-none">
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
+                    </button>
+                </div>
+            </nav>
+        </header>
+    );
+    
+    const Footer = ({ setPage }) => (
+        <footer className="bg-white mt-12 py-8 px-4 border-t">
+            <div className="container mx-auto text-center text-gray-500">
+                <p>&copy; {new Date().getFullYear()} Myelectricitybillcalculator. All Rights Reserved.</p>
+                <div className="mt-4 space-x-4">
+                    <a href="#" onClick={(e) => {e.preventDefault(); setPage('privacy')}} className="hover:text-blue-600">Privacy Policy</a>
+                    <span>|</span>
+                    <a href="#" onClick={(e) => {e.preventDefault(); setPage('terms')}} className="hover:text-blue-600">Terms of Service</a>
+                    <span>|</span>
+                    <a href="#" onClick={(e) => {e.preventDefault(); setPage('disclaimer')}} className="hover:text-blue-600">Disclaimer</a>
+                </div>
+            </div>
+        </footer>
+    );
+
+    const HomePage = ({ setPage }) => (
+        <div className="container mx-auto px-6 py-12 fade-in">
+             <div className="text-center">
+                <img src="https://placehold.co/1200x400/e0f2fe/0c4a6e?text=Electricity+Simplified" 
+                    alt="Abstract image representing energy saving" 
+                    className="w-full max-w-5xl mx-auto rounded-xl shadow-lg mb-8 aspect-[3/1] object-cover"
+                    onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/1200x400/e0f2fe/0c4a6e?text=Error+Loading+Image'; }}
+                />
+                <h1 className="text-5xl font-extrabold text-slate-800 mb-4">India's Electricity Bill, Simplified.</h1>
+                <p className="text-lg text-gray-600 max-w-3xl mx-auto mb-8">
+                    Instantly calculate your electricity bill, estimate appliance costs, and compare tariffs for any Indian state or Union Territory.
+                </p>
+                <div className="flex flex-col sm:flex-row justify-center gap-4">
+                    <button 
+                        onClick={() => setPage('calculator')}
+                        className="bg-blue-600 text-white font-bold py-3 px-8 rounded-lg text-lg hover:bg-blue-700 transition-transform transform hover:scale-105 shadow-lg"
+                    >
+                        Go to Bill Calculator
+                    </button>
+                     <button 
+                        onClick={() => setPage('applianceCalculator')}
+                        className="bg-green-600 text-white font-bold py-3 px-8 rounded-lg text-lg hover:bg-green-700 transition-transform transform hover:scale-105 shadow-lg"
+                    >
+                        Appliance Cost Calculator
+                    </button>
+                </div>
+            </div>
+
+            <div className="mt-16 p-6 bg-white rounded-lg shadow-md max-w-5xl mx-auto text-left">
+              <h2 className="text-2xl font-bold text-slate-800 mb-4 text-center">Explore Our Tools</h2>
+               <div className="grid md:grid-cols-3 gap-8">
+                    <div className="p-6 bg-slate-50 rounded-lg flex flex-col items-center text-center hover:shadow-lg transition-shadow">
+                        <Svgs.Calculator />
+                        <h3 className="text-xl font-bold text-blue-800 mb-2">Full Bill Calculator</h3>
+                        <p className="text-gray-700 mb-4">Get a detailed, slab-wise breakdown of your monthly electricity bill for any connection type.</p>
+                        <a href="#" onClick={(e) => { e.preventDefault(); setPage('calculator'); }} className="font-semibold text-blue-600 hover:underline mt-auto">Calculate Full Bill &rarr;</a>
+                    </div>
+                    <div className="p-6 bg-slate-50 rounded-lg flex flex-col items-center text-center hover:shadow-lg transition-shadow">
+                        <Svgs.Appliances />
+                        <h3 className="text-xl font-bold text-green-800 mb-2">Appliance Cost Calculator</h3>
+                        <p className="text-gray-700 mb-4">Add multiple appliances to estimate their combined monthly cost and see a breakdown per item.</p>
+                        <a href="#" onClick={(e) => { e.preventDefault(); setPage('applianceCalculator'); }} className="font-semibold text-green-600 hover:underline mt-auto">Estimate Appliance Costs &rarr;</a>
+                    </div>
+                     <div className="p-6 bg-slate-50 rounded-lg flex flex-col items-center text-center hover:shadow-lg transition-shadow">
+                        <Svgs.SavingTips />
+                        <h3 className="text-xl font-bold text-yellow-800 mb-2">Bill Saving Tips</h3>
+                        <p className="text-gray-700 mb-4">Discover practical tips and strategies to reduce your monthly electricity consumption and save money.</p>
+                        <a href="#" onClick={(e) => { e.preventDefault(); setPage('savingTips'); }} className="font-semibold text-yellow-600 hover:underline mt-auto">Learn How to Save &rarr;</a>
+                    </div>
+                </div>
+               <p className="mt-8 text-sm text-gray-500 bg-yellow-50 p-3 rounded-md">
+                <span className="font-bold">Disclaimer:</span> The rates are sourced from official documents but may be subject to change. This calculator is for estimation purposes only. Always refer to your official electricity bill from your DISCOM for final amounts.
+              </p>
+            </div>
+        </div>
+    );
+
+    const CalculatorPage = ({ tariffs, setCalculationResult, setComparisonData, setPage }) => {
+        const [state, setState] = useState("Delhi");
+        const [category, setCategory] = useState("Domestic");
+        const [units, setUnits] = useState("");
+        const [fixedCharges, setFixedCharges] = useState("");
+        const [error, setError] = useState("");
+        const [useManualRate, setUseManualRate] = useState(false);
+        const [manualRate, setManualRate] = useState("");
+        
+        const availableCategories = useMemo(() => {
+            return tariffs[state] ? Object.keys(tariffs[state]) : [];
+        }, [state, tariffs]);
+
+        useEffect(() => {
+          if (availableCategories.length > 0 && !availableCategories.includes(category)) {
+            setCategory(availableCategories[0]);
+          }
+        }, [state, availableCategories, category]);
+
+        const handleSubmit = (e) => {
+            e.preventDefault();
+            if (!units || parseInt(units, 10) <= 0) {
+                setError("Please enter a valid number of units (must be greater than 0).");
+                return;
+            }
+            setError("");
+            
+            let result;
+            let finalCategory = category;
+
+            if(useManualRate) {
+              if(!manualRate || parseFloat(manualRate) <= 0){
+                setError("Please enter a valid manual rate.");
+                return;
+              }
+              const manualTariff = {
+                slabs: [{ min: 0, max: Infinity, rate: parseFloat(manualRate) }],
+                fixedCharges: [{charge: parseFloat(fixedCharges) || 0}]
+              };
+              result = calculateBill(manualTariff, parseInt(units, 10), fixedCharges);
+              finalCategory = "Manual Rate";
+            } else {
+              const tariffInfo = tariffs[state]?.[category];
+              if (!tariffInfo) {
+                  setError("Tariff data not available for the selected state and category. Please try another or enter a manual rate.");
+                  return;
+              }
+              result = calculateBill(tariffInfo, parseInt(units, 10), fixedCharges);
+            }
+            
+            setCalculationResult({ ...result, state, category: finalCategory });
+
+            // Generate comparison data
+            const comparison = Object.keys(tariffs).map(compState => {
+                const compTariff = tariffs[compState]?.["Domestic"]; // Compare domestic rates by default
+                if (!compTariff) return null;
+                const bill = calculateBill(compTariff, parseInt(units, 10), null);
+                return { state: compState, total: bill ? bill.totalAmount : 0 };
+            }).filter(Boolean).sort((a, b) => a.total - b.total);
+            
+            setComparisonData(comparison);
+        };
+
+        const currentTariffExists = !!tariffs[state]?.[category];
+
+        return (
+            <div className="container mx-auto px-6 py-8 max-w-2xl fade-in">
+                <div className="bg-white p-8 rounded-2xl shadow-xl">
+                    <h1 className="text-3xl font-bold text-slate-800 mb-6">Bill Calculator</h1>
+                    <form onSubmit={handleSubmit}>
+                        <div className="mb-6">
+                            <label htmlFor="state" className="block text-sm font-medium text-gray-700 mb-1">State / Union Territory</label>
+                            <select id="state" value={state} onChange={e => setState(e.target.value)} className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition">
+                                {Object.keys(tariffs).sort().map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                        </div>
+
+                        <div className="mb-6">
+                            <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                            <select id="category" value={category} onChange={e => setCategory(e.target.value)} className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" disabled={availableCategories.length === 0 || useManualRate}>
+                                {availableCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                                {!availableCategories.length && <option>N/A</option>}
+                            </select>
+                        </div>
+                        
+                        {!currentTariffExists && !useManualRate && (
+                          <div className="p-4 mb-4 text-sm text-yellow-800 rounded-lg bg-yellow-50" role="alert">
+                            <span className="font-medium">Data not available!</span> Tariff data for {state} - {category} is missing. You can enter a manual rate per unit below.
+                          </div>
+                        )}
+
+                        <div className="mb-6">
+                            <label htmlFor="units" className="block text-sm font-medium text-gray-700 mb-1">Total Units Consumed (kWh) in a month</label>
+                            <input type="number" id="units" value={units} onChange={e => setUnits(e.target.value)} placeholder="e.g., 350" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" />
+                        </div>
+
+                        <div className="mb-6">
+                            <label className="flex items-center space-x-2 text-sm text-gray-600">
+                                <input type="checkbox" checked={useManualRate} onChange={() => setUseManualRate(!useManualRate)} className="rounded text-blue-600 focus:ring-blue-500" />
+                                <span>Manually enter per-unit rate</span>
+                            </label>
+                        </div>
+
+                        {useManualRate && (
+                            <div className="mb-6 fade-in">
+                                <label htmlFor="manualRate" className="block text-sm font-medium text-gray-700 mb-1">Rate per Unit (₹)</label>
+                                <input type="number" step="0.01" id="manualRate" value={manualRate} onChange={e => setManualRate(e.target.value)} placeholder="e.g., 7.50" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" />
+                            </div>
+                        )}
+
+                        <div className="mb-6">
+                            <label htmlFor="fixedCharges" className="block text-sm font-medium text-gray-700 mb-1">Fixed Charges (₹) - Optional</label>
+                            <input type="number" id="fixedCharges" value={fixedCharges} onChange={e => setFixedCharges(e.target.value)} placeholder="Override default fixed charge" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" />
+                        </div>
+                        
+                        {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
+                        
+                        <button type="submit" className="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition-transform transform hover:scale-105 shadow-lg">Calculate Bill</button>
+                    </form>
+                </div>
+            </div>
+        );
+    };
+
+    const ResultsDisplay = ({ result, setPage }) => {
+        if (!result) return null;
+
+        return (
+            <div className="container mx-auto px-6 py-8 max-w-4xl fade-in mt-4">
+                <div className="bg-white p-8 rounded-2xl shadow-xl">
+                    <h2 className="text-3xl font-bold text-slate-800 mb-2">Estimated Bill for {result.state} ({result.category})</h2>
+                    <p className="text-lg text-gray-500 mb-6">For {result.totalUnits} units consumed.</p>
+
+                    <div className="text-center bg-slate-100 p-6 rounded-lg mb-8">
+                        <p className="text-xl text-gray-600">Total Amount Payable</p>
+                        <p className="text-5xl font-extrabold text-slate-800">
+                            ₹ {result.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                    </div>
+
+                    <div className="space-y-6">
+                        {result.breakdown.length > 0 && (
+                        <div>
+                            <h3 className="text-xl font-semibold text-slate-700 mb-3">Energy Charge Breakdown</h3>
+                            <table className="w-full text-left">
+                                <thead className="bg-gray-50">
+                                    <tr>
+                                        <th className="p-3 font-medium text-sm text-gray-600 rounded-l-lg">Slab (Units)</th>
+                                        <th className="p-3 font-medium text-sm text-gray-600">Units in Slab</th>
+                                        <th className="p-3 font-medium text-sm text-gray-600">Rate (₹)</th>
+                                        <th className="p-3 font-medium text-sm text-gray-600 rounded-r-lg">Amount (₹)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {result.breakdown.map((item, index) => (
+                                        <tr key={index} className="border-b">
+                                            <td className="p-3">{item.slab}</td>
+                                            <td className="p-3">{item.units}</td>
+                                            <td className="p-3">{item.rate}</td>
+                                            <td className="p-3">{item.amount}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                                <tfoot>
+                                    <tr className="font-bold">
+                                        <td colSpan="3" className="p-3 text-right">Total Energy Charges</td>
+                                        <td className="p-3">₹ {result.energyCharge.toFixed(2)}</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                        )}
+
+                        <div>
+                            <h3 className="text-xl font-semibold text-slate-700 mb-3">Other Charges & Surcharges</h3>
+                            <div className="bg-gray-50 p-4 rounded-lg">
+                                <div className="flex justify-between items-center py-2 border-b">
+                                    <span className="text-gray-600">Fixed Charges</span>
+                                    <span className="font-semibold">₹ {result.fixedCharge.toFixed(2)}</span>
+                                </div>
+                                {result.surcharges.map(charge => (
+                                <div key={charge.name} className="flex justify-between items-center py-2 border-b">
+                                    <span className="text-gray-600">{charge.name}</span>
+                                    <span className="font-semibold">₹ {charge.value.toFixed(2)}</span>
+                                </div>
+                                ))}
+                                <div className="flex justify-between items-center pt-2 font-bold">
+                                    <span className="text-gray-800">Total Other Charges</span>
+                                    <span>₹ {(result.fixedCharge + result.taxes).toFixed(2)}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="mt-8 text-center">
+                            <button 
+                                onClick={() => setPage('comparison')}
+                                className="bg-green-600 text-white font-bold py-3 px-8 rounded-lg text-lg hover:bg-green-700 transition-transform transform hover:scale-105 shadow-lg"
+                            >
+                                Compare Bill with Other States
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const RoomApplianceCalculatorPage = ({ tariffs }) => {
+        const [state, setState] = useState("Maharashtra");
+        const [appliances, setAppliances] = useState([]);
+        const [newAppliance, setNewAppliance] = useState({ name: '', watts: '', hours: '' });
+        const [result, setResult] = useState(null);
+        const [error, setError] = useState("");
+
+        const commonAppliances = [
+            { name: "Ceiling Fan", watts: 75, icon: <Svgs.Fan /> }, 
+            { name: "LED TV (42')", watts: 80, icon: <Svgs.TV /> }, 
+            { name: "Refrigerator", watts: 200, icon: <Svgs.Refrigerator /> },
+            { name: "Laptop", watts: 65, icon: <Svgs.Laptop /> }, 
+            { name: "1 Ton AC", watts: 1200, icon: <Svgs.AC /> }, 
+            { name: "Geyser", watts: 2000, icon: <Svgs.Geyser /> }, 
+            { name: "LED Bulb", watts: 10, icon: <Svgs.Bulb /> }, 
+            { name: "Microwave", watts: 1000, icon: <Svgs.Microwave /> }
+        ];
+
+        const handleNewApplianceChange = (e) => {
+            const { name, value } = e.target;
+            setNewAppliance(prev => ({ ...prev, [name]: value }));
+        };
+
+        const handleAddAppliance = (e) => {
+            e.preventDefault();
+            const { name, watts, hours } = newAppliance;
+            if (!name || !watts || !hours || parseFloat(watts) <= 0 || parseFloat(hours) < 0) {
+                setError("Please provide a valid name, watts, and hours (>=0) for the appliance.");
+                return;
+            }
+            setError("");
+            setAppliances(prev => [...prev, { ...newAppliance, id: Date.now() }]);
+            setNewAppliance({ name: '', watts: '', hours: '' });
+        };
+        
+        const handleRemoveAppliance = (id) => {
+            setAppliances(prev => prev.filter(app => app.id !== id));
+        };
+        
+        useEffect(() => {
+            const tariffInfo = tariffs[state]?.["Domestic"];
+            if (!tariffInfo || appliances.length === 0) {
+                setResult(null);
+                return;
+            }
+
+            const totalMonthlyKwh = appliances.reduce((total, app) => {
+                const dailyKwh = (parseFloat(app.watts) * parseFloat(app.hours)) / 1000;
+                return total + (dailyKwh * 30);
+            }, 0);
+
+            const bill = calculateBill(tariffInfo, totalMonthlyKwh, null);
+            
+            const appliancesWithCost = appliances.map(app => {
+                const monthlyKwh = ((parseFloat(app.watts) * parseFloat(app.hours)) / 1000) * 30;
+                const proportionalCost = totalMonthlyKwh > 0 ? (monthlyKwh / totalMonthlyKwh) * bill.energyCharge : 0;
+                
+                const standaloneBillResult = calculateBill(tariffInfo, monthlyKwh, null);
+                
+                return { 
+                    ...app, 
+                    monthlyKwh, 
+                    cost: proportionalCost,
+                    standaloneBill: standaloneBillResult.totalAmount
+                };
+            });
+
+            setResult({
+                ...bill,
+                appliances: appliancesWithCost,
+                state
+            });
+        }, [appliances, state, tariffs]);
+
+
+        return (
+            <div className="container mx-auto px-6 py-8 max-w-5xl fade-in">
+                <div className="bg-white p-8 rounded-2xl shadow-xl">
+                    <div className="flex flex-col md:flex-row gap-4 items-center">
+                        <img src="https://placehold.co/150x150/ecfdf5/166534?text=Appliances" alt="Household appliances illustration" className="w-24 h-24 md:w-32 md:h-32 rounded-full object-cover"/>
+                        <div>
+                            <h1 className="text-3xl font-bold text-slate-800 mb-2">Room & Appliance Bill Calculator</h1>
+                            <p className="text-gray-600">Add appliances one by one to estimate their combined monthly electricity cost and see a detailed breakdown.</p>
+                        </div>
+                    </div>
+
+                    <div className="mt-8 mb-6">
+                        <label htmlFor="state-appliance" className="block text-sm font-medium text-gray-700 mb-1">Select Your State / Union Territory</label>
+                        <select id="state-appliance" value={state} onChange={e => setState(e.target.value)} className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition max-w-sm">
+                            {Object.keys(tariffs).sort().map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                    </div>
+
+                    <div className="bg-slate-50 p-6 rounded-lg">
+                        <h2 className="text-xl font-semibold text-slate-700 mb-4">Add an Appliance</h2>
+                        
+                        <form onSubmit={handleAddAppliance} className="grid md:grid-cols-4 gap-4 items-end mb-6">
+                            <div className="md:col-span-2">
+                                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">Appliance Name</label>
+                                <input type="text" name="name" value={newAppliance.name} onChange={handleNewApplianceChange} placeholder="e.g., Bedroom Fan" className="w-full p-2 border border-gray-300 rounded-lg"/>
+                            </div>
+                            <div>
+                                <label htmlFor="watts" className="block text-sm font-medium text-gray-700 mb-1">Watts</label>
+                                <input type="number" name="watts" value={newAppliance.watts} onChange={handleNewApplianceChange} placeholder="e.g., 75" className="w-full p-2 border border-gray-300 rounded-lg"/>
+                            </div>
+                            <div>
+                                <label htmlFor="hours" className="block text-sm font-medium text-gray-700 mb-1">Hours/Day</label>
+                                <input type="number" step="0.5" name="hours" value={newAppliance.hours} onChange={handleNewApplianceChange} placeholder="e.g., 8" className="w-full p-2 border border-gray-300 rounded-lg"/>
+                            </div>
+                            <button type="submit" className="w-full bg-blue-600 text-white font-bold py-2 px-3 rounded-lg hover:bg-blue-700 transition md:col-start-4">Add Appliance</button>
+                        </form>
+                         {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
+                        
+                        <div className="border-t pt-4">
+                             <p className="block text-sm font-medium text-gray-700 mb-2">Or Quick Add a Common Appliance</p>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4">
+                                {commonAppliances.map(app => (
+                                    <button key={app.name} onClick={() => setNewAppliance({ name: app.name, watts: app.watts, hours: '1' })} 
+                                        className="flex flex-col items-center p-3 bg-white text-gray-800 text-sm font-semibold rounded-lg hover:bg-gray-200 border transition-all transform hover:scale-105"
+                                        title={`Add ${app.name} (${app.watts}W)`}
+                                    >
+                                        <div className="text-slate-600">{app.icon}</div>
+                                        <span className="mt-1 text-center">{app.name}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                {appliances.length > 0 && (
+                    <div className="bg-white p-8 rounded-2xl shadow-xl mt-8 fade-in">
+                        <h2 className="text-2xl font-bold text-slate-800 mb-4">Your Appliance List</h2>
+                        <ul className="divide-y divide-gray-200 mb-8">
+                           {appliances.map(app => (
+                               <li key={app.id} className="py-3 flex justify-between items-center">
+                                   <div>
+                                       <p className="font-semibold text-slate-800">{app.name}</p>
+                                       <p className="text-sm text-gray-500">{app.watts} Watts &times; {app.hours} hours/day</p>
+                                   </div>
+                                   <button onClick={() => handleRemoveAppliance(app.id)} className="text-red-500 hover:text-red-700 font-semibold text-sm">Remove</button>
+                               </li>
+                           ))}
+                        </ul>
+                        
+                        {result && (
+                            <div>
+                                <h3 className="text-2xl font-bold text-slate-800 mb-4">Estimated Monthly Bill for These Appliances</h3>
+                                 <div className="text-center bg-green-50 p-6 rounded-lg mb-6">
+                                    <p className="text-xl text-green-800">Total Estimated Cost</p>
+                                    <p className="text-5xl font-extrabold text-green-700">
+                                        ₹ {result.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </p>
+                                    <p className="text-md text-green-600 mt-1">for {result.totalUnits.toFixed(2)} kWh in {result.state}</p>
+                                </div>
+                                <h4 className="text-xl font-semibold text-slate-700 mb-3">Cost Breakdown per Appliance</h4>
+                                <div className="overflow-x-auto">
+                                <table className="w-full text-left">
+                                    <thead className="bg-gray-50">
+                                        <tr>
+                                            <th className="p-3 font-medium text-sm text-gray-600 rounded-l-lg">Appliance</th>
+                                            <th className="p-3 font-medium text-sm text-gray-600">Monthly Usage (kWh)</th>
+                                            <th className="p-3 font-medium text-sm text-gray-600">Cost Contribution (₹)</th>
+                                            <th className="p-3 font-medium text-sm text-gray-600 rounded-r-lg">Bill if Used Alone (₹)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                      {result.appliances.map(app => (
+                                          <tr key={app.id} className="border-b">
+                                              <td className="p-3 font-semibold">{app.name}</td>
+                                              <td className="p-3">{app.monthlyKwh.toFixed(2)}</td>
+                                              <td className="p-3">~ ₹ {app.cost.toFixed(2)}</td>
+                                              <td className="p-3">₹ {app.standaloneBill.toFixed(2)}</td>
+                                          </tr>
+                                      ))}
+                                    </tbody>
+                                </table>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+
+    const ComparisonPage = ({ comparisonData, units }) => {
+        const chartRef = useRef(null);
+        const chartInstance = useRef(null);
+
+        useEffect(() => {
+            if (chartRef.current && comparisonData) {
+                if (chartInstance.current) {
+                    chartInstance.current.destroy();
+                }
+
+                const ctx = chartRef.current.getContext('2d');
+                chartInstance.current = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: comparisonData.map(d => d.state),
+                        datasets: [{
+                            label: `Estimated Bill for ${units} Units (₹)`,
+                            data: comparisonData.map(d => d.total),
+                            backgroundColor: 'rgba(59, 130, 246, 0.5)',
+                            borderColor: 'rgba(59, 130, 246, 1)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        indexAxis: 'y',
+                        scales: {
+                            x: {
+                                beginAtZero: true
+                            }
+                        },
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                          legend: {
+                              display: false
+                          }
+                        }
+                    }
+                });
+            }
+             return () => {
+                if (chartInstance.current) {
+                    chartInstance.current.destroy();
+                }
+            };
+        }, [comparisonData, units]);
+        
+        if (!comparisonData || comparisonData.length === 0) {
+            return (
+                <div className="container mx-auto px-6 py-8 text-center">
+                    <p className="text-lg text-gray-600">No comparison data available. Please perform a calculation first.</p>
+                </div>
+            );
+        }
+
+        return (
+            <div className="container mx-auto px-6 py-8 fade-in">
+                <h1 className="text-3xl font-bold text-slate-800 mb-4 text-center">Bill Comparison Across States</h1>
+                <p className="text-lg text-gray-600 mb-8 text-center">Estimated bill for consuming {units} domestic units.</p>
+                
+                <div className="bg-white p-8 rounded-2xl shadow-xl">
+                    <div className="h-96 md:h-[600px] w-full">
+                        <canvas ref={chartRef}></canvas>
+                    </div>
+                </div>
+
+                <div className="bg-white p-8 rounded-2xl shadow-xl mt-8">
+                     <h2 className="text-2xl font-bold text-slate-800 mb-4">Ranked List (Cheapest to Most Expensive)</h2>
+                     <ul className="divide-y divide-gray-200">
+                        {comparisonData.map((item, index) => (
+                           <li key={item.state} className="py-4 flex justify-between items-center">
+                              <span className="font-semibold text-lg text-slate-700">{index + 1}. {item.state}</span>
+                              <span className="font-bold text-lg text-blue-600">₹ {item.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                           </li>
+                        ))}
+                     </ul>
+                </div>
+            </div>
+        );
+    };
+
+    const TariffReferencePage = ({ tariffs }) => {
+        const [selectedState, setSelectedState] = useState("Delhi");
+        
+        const tariff = tariffs[selectedState];
+
+        return (
+            <div className="container mx-auto px-6 py-8 fade-in">
+                <h1 className="text-3xl font-bold text-slate-800 mb-6">Tariff Reference</h1>
+                
+                <div className="mb-6">
+                    <label htmlFor="state-select" className="block text-sm font-medium text-gray-700 mb-1">Select State</label>
+                    <select id="state-select" value={selectedState} onChange={e => setSelectedState(e.target.value)} className="w-full max-w-md p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition">
+                        {Object.keys(tariffs).sort().map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                </div>
+                
+                {tariff ? (
+                    Object.entries(tariff).map(([category, details]) => (
+                        <div key={category} className="bg-white p-8 rounded-2xl shadow-xl mb-8">
+                            <h2 className="text-2xl font-bold text-slate-700 mb-4">{selectedState} - {category}</h2>
+                            <table className="w-full text-left table-auto mb-6">
+                                <thead className="bg-gray-50">
+                                    <tr>
+                                        <th className="p-3 font-medium text-sm text-gray-600 rounded-l-lg">Slab (Units)</th>
+                                        <th className="p-3 font-medium text-sm text-gray-600 rounded-r-lg">Rate per kWh (₹)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {details.slabs.map((slab, i) => (
+                                        <tr key={i} className="border-b">
+                                            <td className="p-3">{slab.min} - {slab.max === Infinity ? 'Above' : slab.max}</td>
+                                            <td className="p-3">{slab.rate.toFixed(2)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                             <h3 className="text-lg font-semibold text-slate-600 mb-2">Fixed Charges</h3>
+                             <p className="text-gray-700 mb-6">{details.fixedCharges?.map(fc => `₹${fc.charge}` + (fc.loadKW ? ` for load <= ${fc.loadKW}kW` : '')).join(', ') || 'N/A'}</p>
+                            
+                            <div className="text-sm text-gray-500 bg-slate-50 p-4 rounded-md">
+                                <p><span className="font-semibold">Data Confidence:</span> <span className={`font-bold ${details.dataConfidence === 'High' ? 'text-green-600' : 'text-yellow-600'}`}>{details.dataConfidence}</span></p>
+                                <p><span className="font-semibold">Last Updated:</span> {details.lastUpdated}</p>
+                                <p><span className="font-semibold">Source:</span> <a href={details.sourceURL} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{details.sourceTitle}</a></p>
+                                {details.notes && <p className="mt-2"><span className="font-semibold">Notes:</span> {details.notes}</p>}
+                            </div>
+                        </div>
+                    ))
+                ) : (
+                    <p className="text-lg text-gray-600">No tariff information available for {selectedState}.</p>
+                )}
+            </div>
+        );
+    };
+
+    const SavingTipsPage = () => {
+        const tips = {
+            "Cooling & Heating": [
+                { title: "Set AC Temperature to 24°C", text: "The Bureau of Energy Efficiency (BEE) recommends 24°C as the ideal temperature for the human body. Every degree you lower it increases electricity consumption by 6%.", impact: "High" },
+                { title: "Clean AC Filters Regularly", text: "Dirty filters block airflow, making your AC work harder. Clean them every two weeks to improve efficiency by 5-15%.", impact: "Medium" },
+                { title: "Use a Ceiling Fan with Your AC", text: "A fan helps circulate cool air, allowing you to raise the thermostat by a few degrees without sacrificing comfort.", impact: "Medium" },
+                 { title: "Use Geyser Timers", text: "Don't leave your water heater on all day. Heat water only when needed or install a timer to automate it. This can save a significant amount on your bill.", impact: "High" }
+            ],
+            "Lighting": [
+                { title: "Switch to LED Bulbs", text: "LEDs use up to 80% less energy than incandescent bulbs and last 25 times longer. This is one of the easiest and most effective changes you can make.", impact: "High" },
+                { title: "Maximize Natural Light", text: "Keep curtains open during the day to use natural light instead of turning on electric lights.", impact: "Low" },
+                { title: "Turn Off Lights When Leaving a Room", text: "It's a simple habit that adds up. If you'll be out of a room for more than a few minutes, flick the switch.", impact: "Medium" }
+            ],
+            "Appliances": [
+                { title: "Unplug 'Vampire' Electronics", text: "Many electronics continue to draw power even when turned off (standby mode). Unplug chargers, TVs, and computers when not in use.", impact: "Medium" },
+                { title: "Use 5-Star Rated Appliances", text: "When buying new appliances like refrigerators, ACs, or washing machines, always choose ones with a high BEE star rating for maximum energy efficiency.", impact: "High" },
+                { title: "Operate Washing Machines with a Full Load", text: "Washing machines use the same amount of energy regardless of the load size. Wait until you have a full load to run a cycle.", impact: "Medium" },
+                { title: "Clean Refrigerator Coils", text: "Dust on the condenser coils at the back of your fridge can make it less efficient. Clean them once a year.", impact: "Low" }
+            ]
+        };
+
+        return (
+            <div className="container mx-auto px-6 py-8 max-w-4xl fade-in">
+                <div className="bg-white p-8 rounded-2xl shadow-xl">
+                    <div className="text-center mb-8">
+                         <img src="https://placehold.co/600x300/fefce8/a16207?text=Save+Energy,+Save+Money" alt="Energy saving illustration" className="w-full max-w-lg mx-auto rounded-lg shadow-md mb-4"/>
+                        <h1 className="text-4xl font-extrabold text-slate-800">Bill Saving Tips</h1>
+                        <p className="text-lg text-gray-600 mt-2">Small changes in your daily habits can lead to big savings on your monthly bill.</p>
+                    </div>
+
+                    {Object.entries(tips).map(([category, tipList]) => (
+                        <div key={category} className="mb-8">
+                            <h2 className="text-2xl font-bold text-slate-700 mb-4 border-b-2 border-yellow-400 pb-2">{category}</h2>
+                            <div className="grid md:grid-cols-2 gap-6">
+                                {tipList.map(tip => (
+                                    <div key={tip.title} className="bg-slate-50 p-6 rounded-lg">
+                                        <div className="flex justify-between items-start">
+                                            <h3 className="text-lg font-semibold text-slate-800">{tip.title}</h3>
+                                            <span className={`text-xs font-bold px-2 py-1 rounded-full ${tip.impact === 'High' ? 'bg-red-100 text-red-800' : tip.impact === 'Medium' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
+                                                {tip.impact} Impact
+                                            </span>
+                                        </div>
+                                        <p className="text-gray-600 mt-2">{tip.text}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    };
+
+    const StaticPage = ({ title, children }) => (
+        <div className="container mx-auto px-6 py-8 max-w-3xl fade-in">
+            <div className="bg-white p-8 rounded-2xl shadow-xl">
+                <h1 className="text-3xl font-bold text-slate-800 mb-6">{title}</h1>
+                <div className="prose max-w-none text-gray-700 space-y-4">
+                    {children}
+                </div>
+            </div>
+        </div>
+    );
+
+    // --- APP CONTAINER ---
+    const App = () => {
+        const [page, setPage] = useState('home');
+        const [tariffs, setTariffs] = useState(initialTariffData);
+        const [calculationResult, setCalculationResult] = useState(null);
+        const [comparisonData, setComparisonData] = useState([]);
+
+        const renderPage = () => {
+            switch (page) {
+                case 'home':
+                    return <HomePage setPage={setPage} />;
+                case 'calculator':
+                    return (
+                      <React.Fragment>
+                        <CalculatorPage 
+                            tariffs={tariffs} 
+                            setCalculationResult={(res) => {
+                                setCalculationResult(res);
+                            }}
+                            setComparisonData={setComparisonData} 
+                            setPage={setPage} 
+                        />
+                        <ResultsDisplay result={calculationResult} setPage={setPage} />
+                      </React.Fragment>
+                    );
+                case 'applianceCalculator':
+                    return <RoomApplianceCalculatorPage tariffs={tariffs} />;
+                case 'savingTips':
+                    return <SavingTipsPage />;
+                case 'comparison':
+                    return <ComparisonPage comparisonData={comparisonData} units={calculationResult?.totalUnits} />;
+                case 'tariffs':
+                    return <TariffReferencePage tariffs={tariffs} />;
+                case 'privacy':
+                    return (
+                        <StaticPage title="Privacy Policy">
+                            <p><strong>Last Updated: 09 September 2024</strong></p>
+                            <p>Myelectricitybillcalculator ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how we handle information when you use our website.</p>
+                            
+                            <h2 className="text-xl font-bold !mt-6 !mb-2">1. Information Collection and Use</h2>
+                            <p>We do not collect, store, transmit, or share any personal information or data you enter into our calculators. All calculations are performed directly in your browser (client-side). The information you input, such as units consumed, appliance wattage, or state selection, is used solely for the purpose of performing the calculation and is discarded when you close or refresh the page.</p>
+
+                            <h2 className="text-xl font-bold !mt-6 !mb-2">2. Cookies and Tracking Technologies</h2>
+                            <p>This website does not use cookies or any other tracking technologies to monitor your activity or store your information.</p>
+
+                            <h2 className="text-xl font-bold !mt-6 !mb-2">3. Third-Party Links</h2>
+                            <p>Our website provides links to external, official government and utility company websites as sources for tariff data. We are not responsible for the privacy practices or the content of these third-party sites. We encourage you to read their privacy policies when you visit them.</p>
+
+                            <h2 className="text-xl font-bold !mt-6 !mb-2">4. Changes to This Privacy Policy</h2>
+                            <p>We may update our Privacy Policy from time to time. We will notify you of any changes by posting the new Privacy Policy on this page. You are advised to review this Privacy Policy periodically for any changes.</p>
+                        </StaticPage>
+                    );
+                case 'terms':
+                     return (
+                        <StaticPage title="Terms of Service">
+                            <p><strong>Last Updated: 09 September 2024</strong></p>
+                            <p>By accessing and using Myelectricitybillcalculator (the "Service"), you accept and agree to be bound by the terms and provision of this agreement.</p>
+                            
+                            <h2 className="text-xl font-bold !mt-6 !mb-2">1. Use of the Service</h2>
+                            <p>The Service is provided to you as a free tool for estimating electricity bills in India. You agree to use the Service for informational and personal, non-commercial purposes only. You must not use the Service for any illegal or unauthorized purpose.</p>
+
+                            <h2 className="text-xl font-bold !mt-6 !mb-2">2. Accuracy of Information</h2>
+                            <p>While we strive to provide accurate and up-to-date tariff information sourced from official documents, we make no warranties or representations regarding the accuracy, completeness, or reliability of any data on the Service. The calculations are for estimation purposes only and should not be considered a substitute for an official bill from your electricity provider.</p>
+
+                            <h2 className="text-xl font-bold !mt-6 !mb-2">3. Intellectual Property</h2>
+                            <p>The Service and its original content, features, and functionality are and will remain the exclusive property of Myelectricitybillcalculator. The content, including the design, layout, and code, is protected by copyright and other intellectual property laws.</p>
+
+                            <h2 className="text-xl font-bold !mt-6 !mb-2">4. Limitation of Liability</h2>
+                            <p>In no event shall Myelectricitybillcalculator, nor its owners, be liable for any indirect, incidental, special, consequential or punitive damages, including without limitation, loss of profits, data, use, goodwill, or other intangible losses, resulting from your access to or use of or inability to access or use the Service.</p>
+
+                             <h2 className="text-xl font-bold !mt-6 !mb-2">5. Governing Law</h2>
+                            <p>These Terms shall be governed and construed in accordance with the laws of India, without regard to its conflict of law provisions.</p>
+                        </StaticPage>
+                    );
+                case 'disclaimer':
+                    return (
+                        <StaticPage title="Disclaimer">
+                             <p><strong>Last Updated: 09 September 2024</strong></p>
+                            <p>The information and calculations provided by Myelectricitybillcalculator (the "Service") are for general informational and estimation purposes only. All information on the site is provided in good faith; however, we make no representation or warranty of any kind, express or implied, regarding the accuracy, adequacy, validity, reliability, availability, or completeness of any information on the site.</p>
+                            
+                            <h2 className="text-xl font-bold !mt-6 !mb-2">For Estimation Purposes Only</h2>
+                            <p>The calculators on this website are designed to provide a close estimate of your electricity bill based on publicly available tariff data. The final amount on your official bill may vary due to factors not included in our calculations, such as:</p>
+                            <ul className="list-disc list-inside">
+                                <li>Specific government subsidies or rebates.</li>
+                                <li>Time-of-day tariffs.</li>
+                                <li>Additional local taxes, duties, or one-time charges.</li>
+                                <li>Meter maintenance charges.</li>
+                                <li>Penalties or arrears from previous billing cycles.</li>
+                            </ul>
+
+                            <h2 className="text-xl font-bold !mt-6 !mb-2">No Professional Advice</h2>
+                            <p>The information provided by the Service does not constitute financial or legal advice. Under no circumstance shall we have any liability to you for any loss or damage of any kind incurred as a result of the use of the site or reliance on any information provided on the site. Your use of the site and your reliance on any information on the site is solely at your own risk.</p>
+
+                            <h2 className="text-xl font-bold !mt-6 !mb-2">Verification Required</h2>
+                            <p>We strongly advise all users to verify the calculations and rates with their official monthly electricity bill issued by their respective electricity distribution company (DISCOM).</p>
+                        </StaticPage>
+                    );
+                default:
+                    return <HomePage setPage={setPage} />;
+            }
+        };
+
+        return (
+            <div className="min-h-screen flex flex-col">
+                <Header setPage={setPage} />
+                <main className="flex-grow">
+                    {renderPage()}
+                </main>
+                <Footer setPage={setPage} />
+            </div>
+        );
+    };
+
+    const container = document.getElementById('root');
+    const root = ReactDOM.createRoot(container);
+    root.render(<App />);
+    </script>
+</body>
+</html>
+
