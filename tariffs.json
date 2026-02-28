@@ -1,0 +1,36 @@
+{
+  "Maharashtra": {
+    "Domestic": {
+      "slabs": [
+        { "min": 0, "max": 100, "rate": 4.0 },
+        { "min": 101, "max": 300, "rate": 6.5 },
+        { "min": 301, "max": "Infinity", "rate": 8.0 }
+      ],
+      "fixedCharges": [{ "charge": 100 }]
+    },
+    "Commercial": {
+      "slabs": [
+        { "min": 0, "max": 200, "rate": 8.0 },
+        { "min": 201, "max": "Infinity", "rate": 10.0 }
+      ],
+      "fixedCharges": [{ "charge": 200 }]
+    }
+  },
+  "Delhi": {
+    "Domestic": {
+      "slabs": [
+        { "min": 0, "max": 200, "rate": 4.0 },
+        { "min": 201, "max": 400, "rate": 5.5 },
+        { "min": 401, "max": "Infinity", "rate": 7.0 }
+      ],
+      "fixedCharges": [{ "charge": 50 }]
+    },
+    "Commercial": {
+      "slabs": [
+        { "min": 0, "max": 200, "rate": 6.0 },
+        { "min": 201, "max": "Infinity", "rate": 8.0 }
+      ],
+      "fixedCharges": [{ "charge": 150 }]
+    }
+  }
+}
